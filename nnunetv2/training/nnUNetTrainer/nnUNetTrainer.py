@@ -8,6 +8,7 @@ from copy import deepcopy
 from datetime import datetime
 from time import time, sleep
 from typing import Union, Tuple, List
+from tqdm import tqdm
 
 import numpy as np
 import torch
@@ -141,12 +142,12 @@ class nnUNetTrainer(object):
                 if self.is_cascaded else None
 
         ### Some hyperparameters for you to fiddle with
-        self.initial_lr = 1e-2
+        self.initial_lr = 1e-3
         self.weight_decay = 3e-5
         self.oversample_foreground_percent = 0.33
         self.num_iterations_per_epoch = 250
         self.num_val_iterations_per_epoch = 50
-        self.num_epochs = 1000
+        self.num_epochs = 50
         self.current_epoch = 0
         self.enable_deep_supervision = True
 
@@ -212,10 +213,10 @@ class nnUNetTrainer(object):
                 self.label_manager.num_segmentation_heads,
                 self.enable_deep_supervision
             ).to(self.device)
-            # compile network for free speedup
-            if self._do_i_compile():
-                self.print_to_log_file('Using torch.compile...')
-                self.network = torch.compile(self.network)
+            # # compile network for free speedup
+            # if self._do_i_compile():
+            #     self.print_to_log_file('Using torch.compile...')
+            #     self.network = torch.compile(self.network)
 
             self.optimizer, self.lr_scheduler = self.configure_optimizers()
             # if ddp, wrap in DDP wrapper
@@ -231,10 +232,11 @@ class nnUNetTrainer(object):
 
     def _do_i_compile(self):
         # new default: compile is enabled!
-        if 'nnUNet_compile' not in os.environ.keys():
-            return True
-        else:
-            return os.environ['nnUNet_compile'].lower() in ('true', '1', 't')
+        # if 'nnUNet_compile' not in os.environ.keys():
+        #     return True
+        # else:
+        #     return os.environ['nnUNet_compile'].lower() in ('true', '1', 't')
+        return False
 
     def _save_debug_information(self):
         # saving some debug information
@@ -603,6 +605,7 @@ class nnUNetTrainer(object):
         return dataset_tr, dataset_val
 
     def get_dataloaders(self):
+        print("get_dataloaders...")
         # we use the patch size to determine whether we need 2D or 3D dataloaders. We also use it to determine whether
         # we need to use dummy 2D augmentation (in case of 3D training) and what our initial patch size should be
         patch_size = self.configuration_manager.patch_size
@@ -654,6 +657,8 @@ class nnUNetTrainer(object):
         # # let's get this party started
         _ = next(mt_gen_train)
         _ = next(mt_gen_val)
+
+        print("get_dataloaders... done")
         return mt_gen_train, mt_gen_val
 
     def get_plain_dataloaders(self, initial_patch_size: Tuple[int, ...], dim: int):
@@ -912,6 +917,14 @@ class nnUNetTrainer(object):
             target = [i.to(self.device, non_blocking=True) for i in target]
         else:
             target = target.to(self.device, non_blocking=True)
+
+        # print(f"target len: {len(target)}")
+        # print(f"target shape: {target[0].shape}")
+        # print(f"data shape: {data.shape}")
+        # print(self.network)
+        # print(f"\n{'-'*50} test inference on network \n")
+        # print(self.network(data))
+        # print(f"\n{'-'*50} DONE \n")
 
         self.optimizer.zero_grad(set_to_none=True)
         # Autocast can be annoying
@@ -1285,13 +1298,13 @@ class nnUNetTrainer(object):
 
     def run_training(self):
         self.on_train_start()
-
+        print(f"Train from epoch {self.current_epoch} to {self.num_epochs - 1}")
         for epoch in range(self.current_epoch, self.num_epochs):
             self.on_epoch_start()
 
             self.on_train_epoch_start()
             train_outputs = []
-            for batch_id in range(self.num_iterations_per_epoch):
+            for batch_id in tqdm(range(self.num_iterations_per_epoch)):
                 train_outputs.append(self.train_step(next(self.dataloader_train)))
             self.on_train_epoch_end(train_outputs)
 

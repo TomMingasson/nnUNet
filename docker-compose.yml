@@ -1,0 +1,16 @@
+version: "1.0"
+services:
+
+  nnUNet:
+    image: nnunet:latest
+    command: tail -F anything
+    volumes:
+      - ../taboulet/taboulet/data/nnUnet:/taboulet/data/nnUnet
+      - .:/nnUNet
+    environment:
+      - nnUNet_raw=/taboulet/data/nnUnet/nnUNet_raw
+      - nnUNet_preprocessed=/taboulet/data/nnUnet/nnUNet_preprocessed
+      - nnUNet_results=/taboulet/data/nnUnet/nnUNet_results
+    privileged: true
+    shm_size: '16gb'
+    runtime: nvidia
